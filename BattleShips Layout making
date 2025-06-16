@@ -1,0 +1,109 @@
+
+/**
+ * BattleShipsGame. A guessing game for two players where they attempt to attack each others ships till one is left standing.
+ *
+ * @author Zahra Salemi
+ * @version 04-06-2025
+ */
+// Library //
+import javax.swing.*;
+import java.awt.*;
+import java.awt.Dimension;
+
+public class BattleShips extends JFrame 
+{
+    // Player's game board: 0= empty, 1= ship
+    int gridRows = 10;
+    int gridCols = 10;
+    private int[][] playerBoard = new int[gridRows][gridCols];
+
+    public BattleShips()
+    {
+        //Setting up the main window:
+        setTitle("BattleShips Game!"); 
+        setSize(800,600); // first int is x, second int is y
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+
+        //Adding a title at the top of the window:
+        JLabel title = new JLabel("BattleShip Game!", SwingConstants.CENTER);
+        title.setFont(new Font("Comic Sans MS", Font.BOLD,24));
+        add(title, BorderLayout.NORTH);
+
+        // Creating a 10x10 grid:
+        JPanel gridPanel = new JPanel(new GridLayout(10,10));
+
+        // Filling the grid with buttons (one for each cell):
+        for (int row =0; row <10; row++) {
+            for (int col = 0; col <10; col++) {
+                JButton cell = new JButton();
+                cell.setPreferredSize(new Dimension(40,40)); // size of each button
+                cell.setActionCommand(row + "," + col); // used for identifying cells later
+                
+                // Checking if this spot is a ship or not
+                if (playerBoard[gridRows][gridCols] == 1) {
+                    cell.setBackground(Color.GRAY); // Shows the ship as a grey
+                    
+                } else {
+                    cell.setBackground(Color.CYAN); // Otherwise keeps the water spot as cyan
+                }
+                gridPanel.add(cell);
+                
+                JButton[][] buttons = new JButton[gridRows][gridCols]; // Store the buttons for later
+                
+                // Adding click listener to fire a shot
+                final int finalRow = gridRows;
+                final int finalCol = gridCols;
+                cell.addActionListener(e -> {
+                    if (playerBoard[finalRow][finalCol] == 1) {
+                        cell.setBackground(Color.RED); // Hit color
+                        System.out.println("Hit at "+finalRow+", "+finalCol);
+                    } else {
+                        cell.setBackground(Color.BLUE); // Miss color
+                        System.out.println("Miss at "+finalRow+", "+finalCol);
+                    }
+                    cell.setEnabled(false); // prevents double clicking
+                });
+                
+                buttons[row][col] = cell;
+                gridPanel.add(cell);
+            }
+        }
+                        
+        // Adding the grid to the center of the window:
+        add(gridPanel,BorderLayout.CENTER);
+
+        // Placing the player's ships on the board (hard-coded for now):
+        placeShips();
+
+        setVisible(true); // Shows the window
+
+    }
+
+    /**
+     * Method to place the ships on player's board in a hard coded position
+     * Doesn't return any value
+     */
+    private void placeShips() {
+        // Each cell places one ship with: length, startRow, startCol, vertical):
+        placeShip(5,0,0, true); // 1x5 ship starting at 0,0 vertical
+        placeShip(4,2,2, false); // 1x4 ship at 2,2, horizontal
+        placeShip(3,5,5, true); // 1st 1x3 ship at 5,5, vertical
+        placeShip(3,7,0, false); // 2nd 1
+        placeShip(2,9,7, false); 
+    }
+
+    /**
+     * Helper method to place one ship on the board
+     * Doesn't return any value
+     */
+    private void placeShip(int length, int x, int y, boolean vertical) {
+        for (int movement = 0; movement < length; movement++) {// If the ship is vertical, we move down the rows
+            if (vertical) { 
+                playerBoard[x+movement][y] = 1;
+            } else { //Otherwise, moving across the columns
+                playerBoard[x][y+movement] =1;
+            }
+        } 
+    }
+}
