@@ -1,0 +1,172 @@
+
+/**
+ * BattleShipsGame. A guessing game for two players where they attempt to attack each others ships till one is left standing.
+ *
+ * @author Zahra Salemi
+ * @version 04-06-2025
+ */
+// Library //
+import javax.swing.*;
+import java.awt.*;
+import java.awt.Dimension;
+
+public class BattleShips extends JFrame 
+{
+    // Player's game board: 0= empty, 1= ship
+    int gridRows = 10;
+    int gridCols = 10;
+    private int[][] playerBoard = new int[gridRows][gridCols];
+    private JButton[][] buttons = new JButton[gridRows][gridCols];
+
+    public BattleShips()
+    {
+        //Setting up the main window:
+        setTitle("BattleShips Game!"); 
+        setSize(800,600); // first int is x, second int is y
+        setDefaultCloseOperation(EXIT_ON_CLOSE); // Closes the window
+        setLayout(new BorderLayout()); // Sets the layout
+
+        //Adding a title at the top of the window:
+        JLabel title = new JLabel("BattleShip Game!", SwingConstants.CENTER);
+        title.setFont(new Font("Comic Sans MS", Font.BOLD,24));
+        
+        JButton helpIcon = new JButton("❓");
+        helpIcon.setFocusPainted(false);
+        helpIcon.setContentAreaFilled(false);
+        helpIcon.setBorderPainted(false);
+        helpIcon.setFont(new Font("SansSerif", Font.PLAIN, 24));
+        helpIcon.setToolTipText(("<html>" +
+        "<b>Welcome to BattleShip!</b><br>" +
+        "This is a two-player game.<br>" +
+        "Place your ships and sink the enemy’s.<br>" +
+        "Click a spot to fire a shot.<br>" +
+        "Red = Hit, Blue = Miss.<br>" +
+        "Ships are shown in grey.<br>" +
+        "<i>Good luck!</i>" +
+        "</html>"));
+        helpIcon.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); // Makes it look interactive for the user
+        helpIcon.setBorder(BorderFactory.createEmptyBorder(0,10,0,0)); // Creates space from the title
+        
+        // Adding both the title and instructions to a panel
+        JPanel titlePanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        titlePanel.setBorder(BorderFactory.createEmptyBorder(10,10,10,10));
+        titlePanel.add(title);
+        titlePanel.add(helpIcon);
+        
+        add(titlePanel,BorderLayout.NORTH);
+        
+        // Placing ships before shopwing the grid:
+        placeShips();
+        
+        // Creating a 10x10 grid:
+        JPanel gridPanel = new JPanel(new GridLayout(gridRows,gridCols));
+
+        // Filling the grid with buttons (one for each cell):
+        for (int row =0; row <10; row++) {
+            for (int col = 0; col <10; col++) {
+                JButton cell = new JButton();
+                cell.setPreferredSize(new Dimension(40,40)); // size of each button
+                cell.setActionCommand(row + "," + col); // used for identifying cells later
+                
+                // Checking if this spot is a ship or not:
+                if (playerBoard[row][col] == 1) {
+                    cell.setBackground(Color.GRAY); // Shows the ship as a grey
+                    
+                } else {
+                    cell.setBackground(Color.CYAN); // Otherwise keeps the water spot as cyan
+                }
+                
+                
+                // Adding click listener to fire a shot:
+                final int finalRow = row; // Final variables for inside listener
+                final int finalCol = col;
+                
+                cell.addActionListener(e ->{
+                    if (playerBoard[finalRow][finalCol] == 1) {
+                        cell.setBackground(Color.RED); // Hit color
+                        System.out.println("Hit at "+finalRow+", "+finalCol);
+                    } else {
+                        cell.setBackground(Color.BLUE); // Miss color
+                        System.out.println("Miss at "+finalRow+", "+finalCol);
+                    }
+                    cell.setEnabled(false); // stops double clicking
+                });
+                
+                buttons[row][col] = cell;
+                gridPanel.add(cell);
+            }
+        }
+                        
+        // Adding the grid to the center of the window:
+        add(gridPanel,BorderLayout.CENTER);
+        
+        // Adding the side panel to the side of the grid:
+        JPanel shipPlacementPanel = createShipPlacementPanel();
+        add(shipPlacementPanel, BorderLayout.WEST); // Adds it to the left side of the grid
+        
+        setVisible(true); // Shows the window
+        ToolTipManager.sharedInstance().setInitialDelay(100); // makes Tooltip appear quikcly
+
+    }
+    
+    /**
+     * Method to create a side panel where the ships will appear before being placed on the main grid
+     * returns JPanel containin all the ships as grey boxes
+     */
+    private JPanel createShipPlacementPanel() {
+        JPanel shipPanel = new JPanel();
+        shipPanel.setPreferredSize(new Dimension(200, getHeight())); // Makes the panel wider
+        shipPanel.setLayout(new BoxLayout(shipPanel, BoxLayout.Y_AXIS));
+        shipPanel.setBorder(BorderFactory.createTitledBorder("Your Ships"));
+        
+        // Createing ships of different lengths:
+        int[] shipSizes = {5,4,3,3,2};
+        
+        for (int size : shipSizes) {
+            JPanel ship = new JPanel();
+            ship.setLayout(new GridLayout(1, size));
+            ship.setMaximumSize(new Dimension(200, 40));
+            ship.setAlignmentX(Component.CENTER_ALIGNMENT);
+            
+            for (int placement = 0; placement < size; placement++) {
+                JLabel cell = new JLabel();
+                cell.setOpaque(true);
+                cell.setBackground(Color.DARK_GRAY);
+                cell.setBorder(BorderFactory.createLineBorder(Color.BLACK));
+                ship.add(cell);
+            }
+            
+            shipPanel.add(Box.createRigidArea(new Dimension(0,10))); // For spacing
+            shipPanel.add(ship);
+        }
+        
+        return shipPanel;
+    }
+    
+    /**
+     * Method to place the ships on player's board in a hard coded position
+     * Doesn't return any value
+     */
+    private void placeShips() {
+        // Each cell places one ship with: length, startRow, startCol, vertical:
+        placeShip(5,0,0, true); // 1x5 ship starting at 0,0 vertical
+        placeShip(4,2,2, false); // 1x4 ship at 2,2, horizontal
+        placeShip(3,5,5, true); // 1st 1x3 ship at 5,5, vertical
+        placeShip(3,7,0, false); // 2nd 1
+        placeShip(2,9,7, false); 
+    }
+
+    /**
+     * Helper method to place one ship on the board
+     * Doesn't return any value
+     */
+    private void placeShip(int length, int x, int y, boolean vertical) {
+        for (int movement = 0; movement < length; movement++) {// If the ship is vertical, we move down the rows
+            if (vertical) { 
+                playerBoard[x+movement][y] = 1;
+            } else { //Otherwise, moving across the columns
+                playerBoard[x][y+movement] =1;
+            }
+        } 
+    }
+}
