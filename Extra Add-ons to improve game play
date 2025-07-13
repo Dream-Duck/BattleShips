@@ -1,0 +1,809 @@
+
+/**
+ * BattleShipsGame. A guessing game for two players where they attempt to attack each others ships till one is left standing.
+ *
+ * @author Zahra Salemi
+ * @version 04-06-2025
+ */
+
+// Library //
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.MouseListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.ActionEvent;
+import java.awt.BorderLayout;
+import java.awt.event.MouseMotionAdapter;
+import java.awt.event.MouseMotionListener;
+
+public class BattleShips extends JFrame 
+{
+    // ==== Class vairables ==== //
+    int gridRows = 10;
+    int gridCols = 10;
+    private JButton[][] buttons = new JButton[gridRows][gridCols]; // Stores button references for each cell
+
+    // ==== Ship placement and tracking variables ==== //
+    private boolean draggingShip = false; // True if a ship is currently selected for dragging
+    private int shipIsDragging = 0; // Holds the size of the ship being dragged
+    private JPanel shipPanel; // Stores the left side panel with draggable ships
+    private JPanel selectedShip = null; // Tracks when ship is selected
+    private JLabel messageLabel; // Shows messages at the bottom of the grid
+
+    // ==== Ship rotation variables ==== //
+    private JButton rotateButton; // Button to toggle ship rotation 
+    private boolean selectedShipIsHorizontal = true; // Tracks direction of selected ship
+
+    // ==== Player and switching boards variables ==== //
+    private int currentPlayer = 1; // Tracks whose turn it is (Player 1 or 2)
+    private int[][] player1Board = new int[gridRows][gridCols];
+    private int[][] player2Board = new int[gridRows][gridCols];
+    private boolean[][] player1Hits = new boolean[gridRows][gridCols]; // tracks where player 1 has already attacked
+    private boolean[][] player2Hits = new boolean[gridRows][gridCols]; // tracks where player 2 has already attacked
+    private JButton nextPlayerButton; // Button to switch to the second player
+    private JButton startGameButton; // Button to start the game after both pkayers have set up
+    private JPanel blackCoverPanel; // Black screen that covers the grid before a turn
+
+    // ==== Ship Variables ==== //
+    private java.util.List<java.util.List<Point>> player1Ships = new java.util.ArrayList<>();
+    private java.util.List<java.util.List<Point>> player2Ships = new java.util.ArrayList<>();
+    private java.util.List<Point> previewCells = new java.util.ArrayList<>(); // Tracks cells being previewed
+
+    public BattleShips()
+    {
+        // ==== Setting up the main window ==== //
+        setTitle("BattleShips Game!"); 
+        setSize(900,600); // Window size: width x height
+        setDefaultCloseOperation(EXIT_ON_CLOSE); // Closes program on window close
+        setLayout(new BorderLayout()); // Sets a border layout
+
+        // ==== Adding a title at the top of the window ==== //
+        JLabel title = new JLabel("BattleShip Game!", SwingConstants.CENTER);
+        title.setFont(new Font("Comic Sans MS", Font.BOLD,24)); // Font styling for title
+
+        // ==== Adding the help icon with tooltip instructions ==== //
+        JButton helpIcon = new JButton("❓");
+        helpIcon.setFocusPainted(false);
+        helpIcon.setContentAreaFilled(false);
+        helpIcon.setBorderPainted(false);
+        helpIcon.setFont(new Font("SansSerif", Font.PLAIN, 24));
+        helpIcon.setToolTipText(( // Tooltip with game instructions
+                "<html>" +
+                "<b>Welcome to BattleShip!</b><br>" +
+                "This is a two-player game.<br>" +
+                "Place your ships and sink the enemy’s.<br>" +
+                "Click your ship and click where you want to place it on the grid <br>" +
+                "Click a spot to fire a shot.<br>" +
+                "Red = Hit, Blue = Miss.<br>" +
+                "Ships are shown in grey.<br>" +
+                "Once you have fully sunk a ship, it will turn yellow. <br>" +
+                "You get a 5 second countdown to switch between players.<br>" +
+                "Guess the other players ships first to win!<br>" +
+                "<i>Good luck!</i>" +
+                "</html>"));
+        helpIcon.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); // Makes it look interactive for the user
+        helpIcon.setBorder(BorderFactory.createEmptyBorder(0,10,0,0)); // Creates space from the title
+
+        // ==== Adding both the title and instructions to a panel ==== //
+        JPanel titlePanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        titlePanel.setBorder(BorderFactory.createEmptyBorder(10,10,10,10));
+        titlePanel.add(title);
+        titlePanel.add(helpIcon);
+        add(titlePanel,BorderLayout.NORTH);
+
+        // ==== Creating a 10x10 grid ==== //
+        JPanel gridPanel = new JPanel(new GridLayout(gridRows,gridCols));
+        for (int row =0; row <gridRows; row++) { // Loops through each cell in the grid and builds buttons
+            for (int col = 0; col <gridCols; col++) {
+                
+                JButton cell = new JButton();
+                cell.setPreferredSize(new Dimension(40, 40)); // Sizes of each button
+                cell.setBackground(Color.CYAN); // Default background is ocean
+                cell.setBorder(BorderFactory.createLineBorder(Color.BLACK, 1)); // Border for visual clarity
+                
+                buttons[row][col] = cell;
+                
+                final int finalRow = row;
+                final int finalCol = col;
+                
+                cell.addActionListener(getGridActionListener(finalRow, finalCol, cell));
+
+                // ==== Adding a hover listener for ship preview ==== //
+                cell.addMouseMotionListener(new MouseMotionAdapter() {
+                        @Override
+                        public void mouseMoved(MouseEvent e) {
+                            showShipPreview(finalRow, finalCol);
+                        }
+                    });
+                    gridPanel.add(cell);
+            }
+        }
+
+        // ==== Adding the grid to the center of the window ==== //
+        add(gridPanel,BorderLayout.CENTER);
+
+        // ==== Creating and adding the ship side panel on the left side ==== //
+        JPanel shipPlacementPanel = createShipPlacementPanel();
+        add(shipPlacementPanel, BorderLayout.WEST); // Adds it to the left side of the grid
+
+        // ==== Adding messages at the bottom of the grid ==== //
+        messageLabel = new JLabel("Place your ships!", SwingConstants.CENTER);
+        messageLabel.setFont(new Font("Comic Sans MS", Font.PLAIN, 14)); // For the font
+        messageLabel.setBorder(BorderFactory.createEmptyBorder(10,0,10,0));
+        add(messageLabel, BorderLayout.SOUTH);
+
+        // ==== Next Player Button ==== //
+        nextPlayerButton = new JButton("Click to move onto the NEXT PLAYER");
+        nextPlayerButton.setVisible(false); // Keeps it hidden until Player 1 is finished
+        nextPlayerButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        nextPlayerButton.addActionListener(new ActionListener() {
+                public void actionPerformed (ActionEvent e) {
+                    currentPlayer = 2;
+                    messageLabel.setText("PLAYER 2: Place Your Ships!");
+                    clearGrid(); // Resets the grid UI
+                    clearShips(); // Resets the ship panel
+                    createShips(); // Re-adds the ships for player 2
+                    rotateButton.setVisible(true); // Shows the rotation button again
+                    nextPlayerButton.setVisible(false);
+
+                }
+            });
+        shipPanel.add(Box.createRigidArea(new Dimension(0,10)));
+        shipPanel.add(nextPlayerButton);
+
+        // ==== Starting the game button ==== //
+        startGameButton = new JButton("START GAME");
+        startGameButton.setVisible(false);
+        startGameButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        startGameButton.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    startGame();
+                }
+            });
+        shipPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        shipPanel.add(startGameButton);
+
+        setVisible(true); // Shows the window
+        ToolTipManager.sharedInstance().setInitialDelay(1000); // makes Tooltip appear quickly
+
+    }
+
+    /**
+     * getGridActionListener
+     * Method that handles the grid cell and clicking logic while dragging
+     * Returns an ActionListener that handles ship placement on the grid
+     */
+    private ActionListener getGridActionListener(int row, int col, JButton cell) {
+        return new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                int[][] activeBoard = (currentPlayer == 1) ? player1Board : player2Board;
+                if (draggingShip && shipIsDragging > 0) {
+                    if (selectedShipIsHorizontal) {
+                        // ==== Checking if the ship fits horizontally ==== //
+                        if (col + shipIsDragging > gridCols) {
+                            messageLabel.setText("Ship doesn't fit in this row.");
+                            return;
+                        }
+
+                        // ==== Checking if the space is already occupied ==== //
+                        boolean canPlace = true;
+
+                        if (canPlace) {
+                            for (int i = 0; i < shipIsDragging; i++) {
+                                activeBoard[row][col + i] = 1;
+                                buttons[row][col + i].setBackground(Color.GRAY);
+                                buttons[row][col + i].setEnabled(false);
+                            }
+
+                            java.util.List<Point> ship = new java.util.ArrayList<>(); 
+                            for (int i = 0; i < shipIsDragging; i++) {
+                                activeBoard[row][col + i] = 1;
+                                buttons[row][col + i].setBackground(Color.GRAY);
+                                buttons[row][col + i].setEnabled(false);
+                                ship.add(new Point(row, col + i));
+                            }
+
+                            if (currentPlayer == 1) {
+                                player1Ships.add(ship);
+                            } else {
+                                player2Ships.add(ship);
+                            }
+
+                            messageLabel.setText("Ship placed!");
+                            draggingShip = false;
+                            shipIsDragging = 0;
+                            selectedShip = null;
+
+                            shipRemover();
+                            previewCells.clear(); // Clear any remaining preview
+
+                        } else {
+                            messageLabel.setText("You can't place a ship on top of another one.");
+                        }
+
+                    } else { // Checking if the ship fits vertically
+                        if (row + shipIsDragging > gridRows) {
+                            messageLabel.setText("Ship doesn't fit in this column.");
+                            return;
+                        }
+
+                        // ==== Checking if the space is already occupied ==== //
+                        boolean canPlace = true;
+
+                        if (canPlace) {
+                            for (int i = 0; i < shipIsDragging; i++) {
+                                activeBoard[row + i][col] = 1;
+                                buttons[row + i][col].setBackground(Color.GRAY);
+                                buttons[row + i][col].setEnabled(false);
+                            }
+
+                            java.util.List<Point> ship = new java.util.ArrayList<>(); 
+                            for (int i = 0; i < shipIsDragging; i++) {
+                                activeBoard[row + i][col] = 1;
+                                buttons[row + i][col].setBackground(Color.GRAY);
+                                buttons[row + i][col].setEnabled(false);
+                                ship.add(new Point(row  + i, col));
+                            }
+
+                            if (currentPlayer == 1) {
+                                player1Ships.add(ship);
+                            } else {
+                                player2Ships.add(ship);
+                            }
+
+                            messageLabel.setText("Ship placed!");
+                            draggingShip = false;
+                            shipIsDragging = 0;
+                            selectedShip = null;
+
+                            shipRemover();
+                            
+
+                        } else {
+                            messageLabel.setText("You can't place a ship on top of another one.");
+                        }
+
+                    }
+                }
+            }
+        };
+    }
+
+    /**
+     * createShipPlacementPanel
+     * Method to create a side panel where the ships will appear before being placed on the main grid
+     * Also creates ships that get dragged and dropped into the grid
+     * Creates a rotation button for the ships as well
+     * Is linked with createShipDragListener method
+     * Returns JPanel containing all the ships as grey boxes
+     */
+    private JPanel createShipPlacementPanel() {
+        shipPanel = new JPanel();
+        shipPanel.setPreferredSize(new Dimension(350, getHeight())); // Makes the panel wider
+        shipPanel.setLayout(new BoxLayout(shipPanel, BoxLayout.Y_AXIS));
+        shipPanel.setBorder(BorderFactory.createTitledBorder("Your Ships"));
+        shipPanel.setBackground(new Color(220,220,220)); // Makes the background of the panel light grey
+
+        // ==== Creating ships of different lengths ==== //
+        int[] shipSizes = {5,4,3,3,2};
+
+        for (int size : shipSizes) {
+            JPanel ship = new JPanel();
+            ship.setLayout(new GridLayout(1, size));
+            ship.setMaximumSize(new Dimension(200, 40));
+            ship.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+            for (int placement = 0; placement < size; placement++) {
+                JLabel cell = new JLabel();
+                cell.setOpaque(true);
+                cell.setBackground(Color.DARK_GRAY);
+                cell.setBorder(BorderFactory.createLineBorder(Color.BLACK));
+                ship.add(cell);
+            }
+            // ==== Adding a click listener to select the ships ==== //
+            ship.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            ship.setToolTipText("Click to select ship of size "+ size);
+
+            ship.addMouseListener(createShipDragListener(size, ship, shipPanel)); // Adds a dragging behavior for ship
+
+            shipPanel.add(Box.createRigidArea(new Dimension(0,10))); // Adds spacing between each ship
+            shipPanel.add(ship);
+        }
+
+        // ==== Creating a rotation button ==== //
+        rotateButton = new JButton("Click to rotate ship!");
+        rotateButton.setFocusPainted(false);
+        rotateButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        rotateButton.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    if (selectedShip == null) { // If no ship is selected:
+                        messageLabel.setText("No ship has been selected. Click on a ship and try again!");
+                        return;
+                    }
+                    selectedShipIsHorizontal = !selectedShipIsHorizontal;
+                    selectedShip.putClientProperty("isHorizontal", selectedShipIsHorizontal); //Saves the choice into the ship panel
+
+                    // ==== Updating the visual layout of the ship ==== //
+                    if (selectedShipIsHorizontal) {
+                        selectedShip.setLayout(new GridLayout(1, selectedShip.getComponentCount()));
+                        rotateButton.setText("Click to rotate ship! Currently Horizontal");
+                    } else {
+                        selectedShip.setLayout(new GridLayout(selectedShip.getComponentCount(), 1));
+                        rotateButton.setText("Click to rotate ship! Currently Vertical");
+                    }
+
+                    selectedShip.revalidate();
+                    selectedShip.repaint();
+                }
+            });
+
+        shipPanel.add(Box.createRigidArea(new Dimension(0,20))); // Makes it spacer
+        shipPanel.add(rotateButton); // Adds the rotate button at the bottom
+
+        return shipPanel;
+    }
+
+    /**
+     * shipRemover
+     * Method to remove the selected ship from the side panel after placement
+     * Checks when all ships are placed
+     * Doesn't return any values
+     */
+    private void shipRemover() {
+        for (Component comp : shipPanel.getComponents()) {
+            if (comp instanceof JPanel && "active".equals(comp.getName())) {
+                shipPanel.remove(comp);
+                shipPanel.revalidate();
+                shipPanel.repaint();
+                break;
+            }
+        }
+
+        // ==== Checking if all ships are placed ==== //
+        boolean shipsLeft = false;
+        for (Component comp : shipPanel.getComponents()) {
+            if (comp instanceof JPanel) {
+                shipsLeft = true;
+                break;
+            }
+        }
+
+        if (!shipsLeft && currentPlayer == 1) { // Moving from player 1 to player 2
+            messageLabel.setText("Player 1 done! Click for NEXT PLAYER");
+            nextPlayerButton.setVisible(true);
+            rotateButton.setVisible(false); // Hides the rotaion button when the player is finished 
+        } else if (!shipsLeft && currentPlayer == 2) { // Moving from player 2 to the start of the game
+            messageLabel.setText("Player 2 done! Ready to play!");
+            startGameButton.setVisible(true);
+            rotateButton.setVisible(false);
+        }
+    }
+
+    /**
+     * createShipDragListener
+     * Method that creates a mouselistener for selecting a ship to drag
+     * Returns a mouselistener object
+     */
+    private MouseListener createShipDragListener(int shipSize, JPanel ship, JPanel shipPanel) {
+        return new MouseListener() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                draggingShip = true;
+                shipIsDragging = shipSize;
+
+                // ==== Unhighlighting previously selected ship ==== // 
+                if (selectedShip !=null && selectedShip !=ship) {
+                    selectedShip.setBorder(null);
+                }
+                selectedShip = ship; // Tracks the current selected ship
+
+                // ==== Checking if this ship has already been rotated ==== //
+                Object stored = selectedShip.getClientProperty("isHorizontal");
+                if (stored != null) {
+                    selectedShipIsHorizontal = (boolean) stored;
+                } else {
+                    selectedShipIsHorizontal = true; // Default to horizontal 
+                    selectedShip.putClientProperty("isHorizontal", true);
+                }
+
+                // ==== Updating the picture ==== //
+                if (selectedShipIsHorizontal) {
+                    ship.setLayout(new GridLayout(1, shipSize));
+                    rotateButton.setText("Click to rotate ship! Currently Horizontal");
+                } else {
+                    ship.setLayout(new GridLayout(shipSize, 1));
+                    rotateButton.setText("Click to rotate ship! Currently Vertical");
+                }
+
+                // ==== Repainting ==== //
+                ship.revalidate();
+                ship.repaint();
+
+                // ==== Highlighting the ship ==== //
+                ship.setBorder(BorderFactory.createLineBorder(Color.BLUE, 3));
+                ship.setName("active"); // Marks the ship being placed with this tag
+
+                // Showing message:
+                messageLabel.setText("Selected ship of size "+ shipSize);
+            }
+
+            @Override public void mouseClicked(MouseEvent e) {}
+
+            @Override public void mouseReleased(MouseEvent e) {}
+
+            @Override public void mouseEntered(MouseEvent e) {}
+
+            @Override public void mouseExited(MouseEvent e) {}
+        };
+    }
+
+    /**
+     * clearGrid
+     * Method to clear the grid buttons back to ocean
+     * For switching from player 1 to player 2, and for the start of the game
+     * Returns no value
+     */
+    private void clearGrid() {
+        for (int row = 0; row < gridRows; row++) {
+            for (int col = 0; col < gridCols; col++) {
+                buttons[row][col].setBackground(Color.CYAN);
+                buttons[row][col].setEnabled(true);
+            }
+        }
+    }
+
+    /**
+     * clearShips
+     * Method to clear all ship from the ship panel on the left
+     * For switching from player 1 to player 2, and for the start of the game
+     * Returns no value
+     */
+    private void clearShips() {
+        Component[] comps = shipPanel.getComponents();
+        for (Component comp : comps) {
+            if (comp instanceof JPanel) {
+                shipPanel.remove(comp);
+            }
+        }
+        shipPanel.revalidate();
+        shipPanel.repaint();
+    }
+
+    /**
+     * createShips
+     * Method to create the ships in the side panel again
+     * For switching from player 1 to player 2
+     * Returns no value
+     */
+    private void createShips() {
+        int[] shipSizes = {5,4,3,3,2};
+        for (int size : shipSizes) {
+            JPanel ship = new JPanel();
+            ship.setLayout(new GridLayout(1, size));
+            ship.setMaximumSize(new Dimension(200, 40));
+            ship.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+            for (int panel = 0; panel < size; panel++) {
+                JLabel cell = new JLabel();
+                cell.setOpaque(true);
+                cell.setBackground(Color.DARK_GRAY);
+                cell.setBorder(BorderFactory.createLineBorder(Color.BLACK));
+                ship.add(cell);
+            }
+
+            ship.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            ship.setToolTipText("Click to select ship of size " + size);
+            ship.addMouseListener(createShipDragListener(size, ship, shipPanel));
+            shipPanel.add(Box.createRigidArea(new Dimension(0,10)));
+            shipPanel.add(ship);
+        }
+
+        shipPanel.revalidate();
+        shipPanel.repaint();
+    }
+
+    /**
+     * startGame
+     * Method that swtiches the screen to the game phase after both players have set up their ships
+     * Displays two grids side by side, one for attack and the other one is their own
+     * Doesn't return any values
+     */
+    private void startGame() {
+        getContentPane().removeAll(); // Clears the window
+
+        // ==== Creating a main panel to hold everything ==== //
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        JPanel grids = new JPanel(new GridLayout(1, 2, 20, 0));
+
+        // ==== Making the left panel (Players own grid) ==== //
+        JPanel playerSide = new JPanel(new BorderLayout());
+        JLabel playerGridTitle = new JLabel("Your Ships", SwingConstants.CENTER);
+        playerGridTitle.setFont(new Font("Comic Sans MS", Font.BOLD, 16));
+        playerSide.add(playerGridTitle, BorderLayout.NORTH);
+
+        JPanel defenseGrid = new JPanel(new GridLayout(gridRows, gridCols));
+        int[][] defenseBoard = (currentPlayer == 1) ? player1Board : player2Board;
+        boolean[][] opponentHits = (currentPlayer == 1) ? player2Hits : player1Hits;
+        for (int row = 0; row < gridRows; row++) {
+            for (int col = 0; col < gridCols; col++) {
+                JButton cell = new JButton();
+                cell.setPreferredSize(new Dimension(40, 40)); // Sizes each button to match the grid
+                cell.setEnabled(false); // Doesn't let the user interact with their own grid
+                cell.setBorder(BorderFactory.createLineBorder(Color.BLACK));
+
+                if (defenseBoard[row][col] == 1 && opponentHits[row][col]) {
+                    cell.setBackground(Color.RED); // Shows they have been hit there
+                } else if (defenseBoard[row][col] == 1) {
+                    cell.setBackground(Color.GRAY); // Shows the not attacked ship
+                } else if (opponentHits[row][col]){
+                    cell.setBackground(Color.BLUE); // Shows the missed shot
+                } else {
+                    cell.setBackground(Color.CYAN); // Ocean
+                }
+                defenseGrid.add(cell);
+            }
+        }
+        playerSide.add(defenseGrid, BorderLayout.CENTER);
+        grids.add(playerSide); // Adds the left side panel
+
+        // ==== Making the right panel (Attacking grid) ==== //
+        JPanel rightPanel = new JPanel(new BorderLayout());
+        JLabel attackLabel = new JLabel("Enemy Waters", SwingConstants.CENTER);
+        attackLabel.setFont(new Font("Comic Sans MS", Font.BOLD, 16));
+        rightPanel.add(attackLabel, BorderLayout.NORTH);
+
+        JPanel attackGrid = new JPanel(new GridLayout(gridRows, gridCols));
+        int[][] opponentBoard = (currentPlayer == 1) ? player2Board : player1Board;
+        boolean[][] currentHits = (currentPlayer == 1) ? player1Hits : player2Hits;
+        for (int row = 0; row < gridRows; row++) {
+            for (int col = 0; col < gridCols; col++) {
+                JButton cell = new JButton();
+                cell.setPreferredSize(new Dimension(40, 40)); // Sizes each button to match the grid
+
+                // If already attacked, show hit or miss color
+                if (currentHits[row][col]) {
+                    if (opponentBoard[row][col] == 1) {
+                        if (checkShipSunk(opponentBoard, currentHits, row, col, attackGrid)) {
+                            cell.setBackground(Color.YELLOW); // Fully sunk enemy ship
+                        } else {
+                            cell.setBackground(Color.RED); // Hit
+                        }
+                    } else {
+                        cell.setBackground(Color.BLUE); // Miss
+                    }
+                } else {
+                    cell.setBackground(Color.CYAN); // Water
+                }
+                cell.setBorder(BorderFactory.createLineBorder(Color.BLACK));
+
+                final int ROW = row;
+                final int COL = col;
+
+                cell.addActionListener(new ActionListener() {
+                        public void actionPerformed(ActionEvent e) {
+                            // ==== Prevent attacking the same spot twice ==== //
+                            if (currentHits[ROW][COL]) {
+                                messageLabel.setText("You've already attacked this spot!");
+                                return;
+                            }
+
+                            currentHits[ROW][COL] = true; // Mark that this spot has been attacked
+                            cell.setEnabled(false); // Disable the cell after it's clicked
+
+                            // ==== Checking if it's a hit or miss ==== //
+                            boolean isHit = (opponentBoard[ROW][COL] == 1);
+                            cell.setBackground(isHit ? Color.RED : Color.BLUE); // Hit = red, Miss = blue
+                            messageLabel.setText(isHit ? "Hit!" : "Miss!"); // Display result message
+
+                            // ==== Declaring when a ship has been sunk ==== //
+                            if (isHit) {
+                                boolean sunk = checkShipSunk(opponentBoard, currentHits, ROW, COL, attackGrid);
+                                messageLabel.setText(sunk ? "Hit! You sunk a ship!" : "Hit!");
+                            }
+
+                            // ==== Disable all attack buttons during countdown ==== //
+                            for (Component comp : attackGrid.getComponents()) {
+                                if (comp instanceof JButton) {
+                                    comp.setEnabled(false);
+                                }
+                            }
+
+                            // ==== Checking for win before switching ==== //
+                            if (checkWin(opponentBoard, currentHits)) {
+                                messageLabel.setText("Player "+currentPlayer+" wins!");
+                                return;
+                            }
+
+                            // ==== Making a Countdown before switching players ==== //
+                            Timer timer = new Timer(1000, null); // fires every second
+                            final int[] countdown = {5}; // Countdown from 5
+
+                            timer.addActionListener(new ActionListener() {
+                                    public void actionPerformed(ActionEvent e) {
+                                        if (countdown[0] > 1) {
+                                            countdown[0]--;
+                                            messageLabel.setText((isHit ? "Hit! " : "Miss! ") + 
+                                                "Switching in " + countdown[0] + "...");
+                                        } else {
+                                            timer.stop(); // Stop timer when done
+                                            currentPlayer = (currentPlayer == 1) ? 2 : 1; // Switch turn
+                                            showCover(); // Shows the black cover before the turn starts
+                                        }
+                                    }
+                                });
+
+                            timer.setInitialDelay(1000); // Delay before first tick
+                            timer.start(); // Start the countdown
+                        }
+                    });
+
+                attackGrid.add(cell); // Adds cells to attack grid panel
+            }
+        }
+        rightPanel.add(attackGrid, BorderLayout.CENTER);
+        grids.add(rightPanel); // Adds right side;
+
+        mainPanel.add(grids, BorderLayout.CENTER); // Adding the side-by-side grids
+
+        // ==== Adding the bottom messages ==== //
+        messageLabel = new JLabel("Player "+currentPlayer+": Take your shot!",SwingConstants.CENTER);
+        messageLabel.setFont(new Font("Comic Sans MS", Font.PLAIN, 14));
+        messageLabel.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 0));
+        mainPanel.add(messageLabel, BorderLayout.SOUTH);
+
+        // ==== Adding everything back to the frame ==== //
+        setContentPane(mainPanel);
+        revalidate();
+        repaint();
+    }
+
+    /**
+     * checkWin
+     * Method to check is all ships have been hit on opponent's board
+     */
+    private boolean checkWin(int[][] opponentBoard, boolean[][] hitTracker) {
+        for (int row = 0; row < gridRows; row++) {
+            for (int col = 0; col < gridCols; col++) {
+                if (opponentBoard[row][col] == 1 && !hitTracker[row][col]) {
+                    return false; // A ship is still alive
+                }
+            }
+        }
+        return true; // All ships have sunk!
+    }
+
+    /**
+     * checkShipSunk
+     * Checks if all parts of a ship have been hit and highlights them yellow if fully sunk.
+     */
+    private boolean checkShipSunk(int[][] board, boolean[][] hits, int row, int col, JPanel gridPanel) {
+        java.util.List<java.util.List<Point>> opponentShips = (currentPlayer == 1) ? player2Ships : player1Ships;
+
+        for (java.util.List<Point> ship : opponentShips) { // Checking if this ship the cell that was just hit
+            boolean contains = false;
+            for (Point p : ship) {
+                if (p.x == row && p.y == col) {
+                    contains = true;
+                    break;
+                }
+            }
+
+            if (contains) { // Checking if all parts of the ship have been hit
+                boolean allHit = true;
+                for (Point p : ship) {
+                    if (!hits[p.x][p.y]) { // If all parts of the ship haven't been sunk
+                        allHit = false;
+                        break;
+                    }
+                }
+
+                if (allHit) { // Marking the ship as yellow
+                    for (Point p : ship) {
+                        int i = p.x * gridCols + p.y;
+                        if (i >= 0 && i < gridPanel.getComponentCount()) {
+                            Component comp = gridPanel.getComponent(i);
+                            if (comp instanceof JButton) {
+                                comp.setBackground(Color.YELLOW);
+                            }
+                        }
+                    }
+
+                    return true; // Meaning the ship has fully sunk
+                } else {
+                    return false; // Meaning ship has not fully sunk yet
+                }
+            }
+        }
+
+        return false; // the cell didn't match any ship
+    }
+
+    /**
+     * showCover
+     * Method that creates a blank cover after the countdown.
+     * Creates a button for the next player to start
+     * Prevents further cheating
+     */
+    private void showCover() {
+        // ==== Creating the blank panel that covers everything ==== //
+        blackCoverPanel = new JPanel(new BorderLayout());
+        blackCoverPanel.setBackground(Color.BLACK);
+
+        // Creating the label and button to begin turn ==== //
+        JLabel turnLabel = new JLabel("Player "+currentPlayer+", Click to begin YOUR TURN");
+        turnLabel.setForeground(Color.WHITE);
+        turnLabel.setFont(new Font("Comic Sans MS", Font.BOLD, 24));
+        blackCoverPanel.add(turnLabel, BorderLayout.CENTER);
+
+        JButton startTurnButton = new JButton("START TURN");
+        startTurnButton.setFont(new Font("Comic Sans MS", Font.BOLD, 18));
+        startTurnButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        startTurnButton.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    // ==== Removing the black screen and beginning the game ==== //
+                    getContentPane().remove(blackCoverPanel);
+                    startGame(); // Shows the grid
+                }
+            });
+
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.setOpaque(false); // Keep black background
+        buttonPanel.add(startTurnButton);
+        blackCoverPanel.add(buttonPanel, BorderLayout.SOUTH);
+
+        setContentPane(blackCoverPanel);
+        revalidate();
+        repaint();
+    }
+
+    private void showShipPreview(int row, int col) {
+        // ==== Clearing old preview first ==== //
+        for (Point p : previewCells) {
+            JButton btn = buttons[p.x][p.y];
+            if ((currentPlayer == 1 && player1Board[p.x][p.y] == 0) ||
+            (currentPlayer == 2 && player2Board[p.x][p.y] == 0)) {
+                btn.setBackground(Color.CYAN); // Reset only unoccupied previewed cells
+            }
+        }
+        previewCells.clear();
+
+        if (!draggingShip || shipIsDragging == 0) {
+            return; // Only preview if a ship is selected
+        }
+        int[][] board = (currentPlayer == 1) ? player1Board : player2Board;
+
+        if (selectedShipIsHorizontal) {
+            if (col + shipIsDragging > gridCols) {
+                return; // Out of bounds
+            }
+
+            // Check for collision
+            for (int i = 0; i < shipIsDragging; i++) {
+                if (board[row][col + i] == 1) {
+                    return; // Can't preview here 
+                }
+            }
+
+            // Show preview
+            for (int i = 0; i < shipIsDragging; i++) {
+                buttons[row][col + i].setBackground(new Color(180, 180, 180)); // Light grey
+                previewCells.add(new Point(row, col + i));
+            }
+
+        } else { // Vertical
+            if (row + shipIsDragging > gridRows) return;
+
+            for (int i = 0; i < shipIsDragging; i++) {
+                if (board[row + i][col] == 1) return;
+            }
+
+            for (int i = 0; i < shipIsDragging; i++) {
+                buttons[row + i][col].setBackground(new Color(180, 180, 180));
+                previewCells.add(new Point(row + i, col));
+            }
+        }
+    }
+
+}
+
